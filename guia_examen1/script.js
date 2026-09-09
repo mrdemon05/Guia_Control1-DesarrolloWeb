@@ -287,6 +287,9 @@ let currentIndex = 0;
 let score = 0;
 let userAnswers = [];
 let examMode = '';
+let simTimerEnabled = false;
+let simTimerInterval = null;
+const SIM_TIME_PER_Q = 60;
 
 function shuffle(arr) {
   return arr.sort(() => Math.random() - 0.5);
@@ -304,7 +307,7 @@ function startDetecta(tipo) {
 function startExam(mode) {
   examMode = mode;
   let pool = [...questions];
-  if (mode === 'codigo') pool = pool.filter(q => q.type === 'code' || q.level !== 'facil');
+  if (mode === 'codigo') pool = pool.filter(q => q.type === 'code');
   if (mode === 'teoria') pool = pool.filter(q => q.type === 'mc');
   if (mode === 'rapido') currentQuestions = shuffle(pool).slice(0, 10);
   else if (mode === 'completo') currentQuestions = shuffle(pool).slice(0, 25);
@@ -332,28 +335,59 @@ function renderQuestion(containerId) {
   const opts = shuffle([...q.options]);
   const correctText = q.options[q.correct];
 
+  const showTimer = containerId === 'simArea' && simTimerEnabled;
+
   container.innerHTML = `
     <div class="question-box">
       <div style="display:flex;justify-content:space-between;margin-bottom:0.5rem;">
         <span>Pregunta ${currentIndex + 1} / ${currentQuestions.length}</span>
         <span class="level-${q.level}">${q.level === 'facil' ? '🟢 Fácil' : q.level === 'medio' ? '🟡 Medio' : '🔴 Difícil'}</span>
       </div>
+      ${showTimer ? `<div class="timer-row"><div class="timer-bar"><div class="timer-fill" id="timerFill"></div></div><span id="timerText">${SIM_TIME_PER_Q}s</span></div>` : ''}
       <h3>${q.q}</h3>
       ${q.code ? `<div class="code-snippet">${escapeHtml(q.code)}</div>` : ''}
       <div class="options" id="opts">
-        ${opts.map((o,i) => `<button class="option" onclick="answer('${escapeHtml(o)}', '${escapeHtml(correctText)}', ${containerId === 'simArea'})">${o}</button>`).join('')}
+        ${opts.map((o,i) => `<button class="option" onclick="answer('${escapeJsString(o)}', '${escapeJsString(correctText)}', ${containerId === 'simArea'})">${escapeHtml(o)}</button>`).join('')}
       </div>
       <div id="feedback" class="feedback hidden"></div>
       <button id="nextBtn" class="btn-primary hidden" style="margin-top:1rem;" onclick="nextQ('${containerId}')">Siguiente</button>
     </div>
   `;
+
+  if (showTimer) startQuestionTimer();
+}
+
+function startQuestionTimer() {
+  clearInterval(simTimerInterval);
+  let timeLeft = SIM_TIME_PER_Q;
+  const fill = document.getElementById('timerFill');
+  const text = document.getElementById('timerText');
+  simTimerInterval = setInterval(() => {
+    timeLeft--;
+    if (text) text.textContent = timeLeft + 's';
+    if (fill) {
+      fill.style.width = (timeLeft / SIM_TIME_PER_Q * 100) + '%';
+      fill.classList.toggle('warning', timeLeft <= SIM_TIME_PER_Q * 0.5 && timeLeft > SIM_TIME_PER_Q * 0.2);
+      fill.classList.toggle('danger', timeLeft <= SIM_TIME_PER_Q * 0.2);
+    }
+    if (timeLeft <= 0) {
+      clearInterval(simTimerInterval);
+      const q = currentQuestions[currentIndex];
+      answer('', q.options[q.correct], true);
+    }
+  }, 1000);
 }
 
 function escapeHtml(text) {
   return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+function escapeJsString(text) {
+  return String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 function answer(selected, correct, isSim) {
+  clearInterval(simTimerInterval);
   const opts = document.querySelectorAll('.option');
   opts.forEach(btn => {
     btn.disabled = true;
@@ -394,6 +428,7 @@ function nextQ(containerId) {
 }
 
 function showResults(containerId) {
+  clearInterval(simTimerInterval);
   const container = document.getElementById(containerId);
   const pct = Math.round((score / currentQuestions.length) * 100);
   if (pct > progress.bestScore) progress.bestScore = pct;
@@ -430,6 +465,7 @@ function retryWrong() {
 // ========== SIMULACIÓN ==========
 function startSimulacion() {
   const num = parseInt(document.getElementById('simNum').value) || 15;
+  simTimerEnabled = document.getElementById('simTimer').checked;
   currentQuestions = shuffle(questions).slice(0, num);
   currentIndex = 0; score = 0; userAnswers = [];
   document.getElementById('simConfig').classList.add('hidden');
@@ -514,5 +550,7 @@ function renderProgress() {
 }
 
 // Inicio
+document.getElementById('statTemas').textContent = topics.length;
+document.getElementById('statPreguntas').textContent = questions.length;
 updateUI();
 showSection('inicio');
