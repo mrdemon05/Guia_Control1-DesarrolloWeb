@@ -1,0 +1,10 @@
+body {
+  background-image: url(image.png);
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+  height: 100vh;
+  margin: 0;
+  text-align: center;
+  padding: 15px;
+}
